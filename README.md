@@ -8,6 +8,30 @@ an open wall panel and thermostat that works with Home Assistant.
 Nothing of the original software is removed; from the ReToon web interface
 (Settings, System, Starting up) you can go back to it.
 
+## What ReToon looks like
+
+On the Toon itself:
+
+| | |
+|---|---|
+| ![Home page with the thermostat](img/toon-default-home.png) | ![A page with tiles and the bar at the bottom](img/toon-page.png) |
+| The home page: thermostat dial with presets, clock and the Toon's own sensors | Pages like in Home Assistant, with the page bar at the bottom |
+| ![Values straight from an MQTT broker](img/toon-mqtt-page.png) | ![WiFi setup on the screen](img/toon-wifi-keyboard.png) |
+| Values and switches straight from an MQTT broker | WiFi is set up on the screen itself |
+| ![Start-up picture](img/splash.png) | ![Rescue mode](img/rescue.png) |
+| While starting | Rescue mode, when the system cannot start |
+
+From a browser, the Toon's own web interface:
+
+| | |
+|---|---|
+| ![Editing pages](img/web-pages.png) | ![Editing a card](img/web-card.png) |
+| Pages and cards, with the Toon's real screen next to them | One card |
+
+![Thermostat settings](img/web-settings.png)
+
+Thermostat settings: presets, week program, temperature sensors.
+
 ## Files
 
 - `RetoonApp.qml`, `RetoonTile.qml`, `RetoonScreen.qml`: a tile and one screen
