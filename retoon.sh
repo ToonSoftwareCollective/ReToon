@@ -41,6 +41,27 @@ rm -f /tmp/retoon.request
 [ -n "$ACTION" ] || ACTION=check
 
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $*" >> $LOG; }
+
+# One at a time. The app asks for a check whenever its screen is shown, and
+# that can happen while an install is busy: a second run would unmount the
+# partition the first one is writing to. A check that finds another run busy
+# goes away quietly; an install waits for a check to finish.
+LOCK=/tmp/retoon.lock
+while ! mkdir $LOCK 2>/dev/null; do
+	pid=$(cat $LOCK/pid 2>/dev/null)
+	if [ -z "$pid" ] || ! kill -0 "$pid" 2>/dev/null; then
+		rm -rf $LOCK
+		continue
+	fi
+	if [ "$ACTION" != install ] || [ "$(cat $LOCK/action 2>/dev/null)" != check ]; then
+		log "$ACTION asked for while $(cat $LOCK/action 2>/dev/null) is busy: left out"
+		exit 0
+	fi
+	sleep 1
+done
+echo $$ > $LOCK/pid
+echo "$ACTION" > $LOCK/action
+trap 'rm -rf $LOCK' EXIT
 status() {	# state, step, text
 	log "$1: $3"
 	printf '{"state":"%s","step":%s,"steps":%s,"text":"%s"}\n' "$1" "$2" $STEPS "$3" > $STATUS.tmp
@@ -86,7 +107,9 @@ if [ "$ACTION" = check ]; then
 	if [ -z "$missing" ]; then
 		status ready 0 "ReToon is on this Toon. Press the button to start it."
 	elif [ -s "$ARCHIVE" ] || [ -s "$APP/source.url" ]; then
-		status needed 0 "ReToon is not on this Toon yet ($(echo $missing | wc -w) files to put in place). Press the button to install and start it."
+		n=$(echo $missing | wc -w)
+		[ $n = 1 ] && what="1 file" || what="$n files"
+		status needed 0 "ReToon is not on this Toon yet ($what to put in place). Press the button to install and start it."
 	else
 		status error 0 "ReToon is not on this Toon yet and the app has neither its archive (retoon.tar.gz) nor a download address."
 	fi
