@@ -1,0 +1,2 @@
+1.0.0
+- First version: sets up and starts ReToon from the original Toon 2 software.
