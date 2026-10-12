@@ -22,8 +22,9 @@
 #                    does not have to contain it)
 #   p1 (vfat)        boot.scr - what makes the next start go to ReToon
 # Files that are already there with the right checksum (files.sha256 next to
-# this script) are kept; the others are fetched from the address in the file
-# "source.url" next to this script.
+# this script) are kept; the others are taken from retoon.tar.gz next to this
+# script. Without that archive they are fetched from the address in the file
+# "source.url" next to this script, if there is one.
 
 APP=$(cd "$(dirname "$0")" && pwd)
 STATUS=/tmp/retoon.status
@@ -32,6 +33,7 @@ OS=/mnt/data/toon-os
 P3=/tmp/retoon-p3
 P1=/tmp/retoon-p1
 VENDOR_WIFI=/etc/network/wpa_supplicant.wlan0.conf
+ARCHIVE=$APP/retoon.tar.gz
 STEPS=7
 
 ACTION=${1:-$(cat /tmp/retoon.request 2>/dev/null)}
@@ -83,29 +85,43 @@ if [ "$ACTION" = check ]; then
 	cleanup
 	if [ -z "$missing" ]; then
 		status ready 0 "ReToon is on this Toon. Press the button to start it."
-	elif [ -s "$APP/source.url" ]; then
-		status needed 0 "ReToon is not on this Toon yet ($(echo $missing | wc -w) files to fetch). Press the button to install and start it."
+	elif [ -s "$ARCHIVE" ] || [ -s "$APP/source.url" ]; then
+		status needed 0 "ReToon is not on this Toon yet ($(echo $missing | wc -w) files to put in place). Press the button to install and start it."
 	else
-		status error 0 "ReToon is not on this Toon yet and the app has no download address (source.url)."
+		status error 0 "ReToon is not on this Toon yet and the app has neither its archive (retoon.tar.gz) nor a download address."
 	fi
 	exit 0
 fi
 [ "$ACTION" = install ] || fail "Unknown request: $ACTION"
 
-# 1. fetch what is missing
+# 1. get what is missing: out of the archive that came with the app, or,
+#    without one, from the download address
 if [ -n "$missing" ]; then
 	url=$(head -n 1 "$APP/source.url" 2>/dev/null | tr -d '\r\n')
-	[ -n "$url" ] || fail "Files are missing and the app has no download address (source.url)."
+	[ -s "$ARCHIVE" ] || [ -n "$url" ] ||
+		fail "Files are missing and the app has neither its archive (retoon.tar.gz) nor a download address."
 	free=$(df -k /mnt/data | tail -n 1 | awk '{print $4}')
 	[ "$free" -gt 60000 ] || fail "Not enough room on the data partition."
 	mkdir -p $OS/download
+	if [ -s "$ARCHIVE" ]; then
+		# the files sit in one folder inside the archive
+		top=$(tar -tzf "$ARCHIVE" 2>> $LOG | head -n 1 | cut -d / -f 1)
+		[ -n "$top" ] || fail "The archive of the app (retoon.tar.gz) is damaged. Install the app again."
+	fi
 	n=0
 	for f in $missing; do
 		n=$((n + 1))
-		status working 1 "Fetching $f ($n of $(echo $missing | wc -w))"
-		curl -fsSL --connect-timeout 20 -o "$OS/download/$f" "${url%/}/$f" >> $LOG 2>&1 ||
-			fail "Could not fetch $f. Is the Toon connected to the internet?"
-		good "$OS/download/$f" $f || fail "$f arrived damaged. Try again."
+		if [ -s "$ARCHIVE" ]; then
+			status working 1 "Unpacking $f ($n of $(echo $missing | wc -w))"
+			tar -xzOf "$ARCHIVE" "$top/$f" > "$OS/download/$f" 2>> $LOG ||
+				fail "Could not unpack $f. Install the app again."
+			good "$OS/download/$f" $f || fail "$f in the archive of the app is damaged. Install the app again."
+		else
+			status working 1 "Fetching $f ($n of $(echo $missing | wc -w))"
+			curl -fsSL --connect-timeout 20 -o "$OS/download/$f" "${url%/}/$f" >> $LOG 2>&1 ||
+				fail "Could not fetch $f. Is the Toon connected to the internet?"
+			good "$OS/download/$f" $f || fail "$f arrived damaged. Try again."
+		fi
 	done
 fi
 

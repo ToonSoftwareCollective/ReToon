@@ -16,16 +16,18 @@ Nothing of the original software is removed; from the ReToon web interface
   `/tmp/retoon.request` and `external-retoon` to `/tmp/tsc.command`; the
   helper then runs this script as root. Progress is in `/tmp/retoon.status`
   (JSON) and `/var/log/retoon.log`.
-- `files.sha256`: the five files that make up ReToon (kernel, device tree,
-  initrd, system image, boot script), with checksums. Files already on the
-  Toon with the right checksum are kept.
-- `source.url` (not included yet): one line with the address the missing
-  files are fetched from, as `<address>/<file name>`. Without it the app can
-  only start a ReToon that is already on the Toon.
+- `retoon.tar.gz`: ReToon itself, the five files a Toon needs (kernel, device
+  tree, initrd, system image, boot script). The app unpacks what is missing
+  from it; nothing is downloaded.
+- `files.sha256`: those five files with their checksums. Files already on the
+  Toon with the right checksum are kept, and every unpacked file is checked.
+- `source.url` (optional, not included): one line with an address to fetch
+  the files from, as `<address>/<file name>`, used only when `retoon.tar.gz`
+  is not there.
 
 ## What the button does
 
-1. Fetches the files that are missing and checks them.
+1. Unpacks the files that are missing from `retoon.tar.gz` and checks them.
 2. Puts the system image on the data partition (`/mnt/data/toon-os/`).
 3. Puts kernel, device tree and initrd on the third partition, next to the
    recovery files.
@@ -43,6 +45,7 @@ from a shell.
 
 ## Status
 
-Tested on two Toon 2 units: all steps including the restart into ReToon with
-WiFi and Bluetooth working, started from the button on the screen. The ReToon
-images are not published yet, so there is no download address.
+Test version. Tested on two Toon 2 units: all steps including the restart
+into ReToon with WiFi and Bluetooth working, started from the button on the
+screen. The thermostat part of ReToon has never been connected to a real
+boiler.

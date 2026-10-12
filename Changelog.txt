@@ -1,2 +1,4 @@
+1.0.1
+- ReToon itself now comes with the app (retoon.tar.gz); nothing is downloaded.
 1.0.0
 - First version: sets up and starts ReToon from the original Toon 2 software.

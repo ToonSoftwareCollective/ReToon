@@ -19,7 +19,7 @@ App {
 	property string setupState: "idle"
 	property string setupText: ""
 	property int setupStep: 0
-	property int setupSteps: 6
+	property int setupSteps: 7
 
 	function init() {
 		registry.registerWidget("tile", tileUrl, this, null, {thumbLabel: "ReToon", thumbIcon: thumbnailIcon, thumbCategory: "general", thumbWeight: 30, baseTileWeight: 10, baseTileSolarWeight: 10, thumbIconVAlignment: "center"});
