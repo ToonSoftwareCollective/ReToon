@@ -1,3 +1,9 @@
+1.0.6
+- "Always start ReToon" is off at first: after installing, ReToon runs until
+  the next restart, which goes back to the original software. Switch it on
+  in the ReToon web interface (Settings, System, Starting up) to keep it.
+- New ReToon image (0.1.0-test5): Restart button on the info screen.
+- README: what ReToon does on the Toon itself and what with Home Assistant.
 1.0.5
 - The thermostat's preset temperatures and week program are taken over
   from the original software (thermostat.awk).
