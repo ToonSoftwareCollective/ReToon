@@ -1,3 +1,8 @@
+1.0.5
+- The thermostat's preset temperatures and week program are taken over
+  from the original software (thermostat.awk).
+- New ReToon image (0.1.0-test4): apps, QR code on the info screen to log in
+  to the web page, the clock is set as soon as WiFi connects.
 1.0.4
 - Fix: WiFi did not connect after the install. The WiFi settings taken over
   from the original software began with a line ReToon cannot read, so it

@@ -17,6 +17,8 @@
 #   p4 /mnt/data     toon-os/rootfs.squashfs, toon-os/boot.scr,
 #                    toon-os/config/wpa_supplicant.conf (taken over from this
 #                    system, so WiFi works at once),
+#                    toon-os/config/thermostat.json (the preset temperatures
+#                    and week program of this system, see thermostat.awk),
 #                    toon-os/firmware/brcm/: the WiFi and Bluetooth chip's
 #                    firmware, copied from this system (so a ReToon image
 #                    does not have to contain it)
@@ -33,6 +35,7 @@ OS=/mnt/data/toon-os
 P3=/tmp/retoon-p3
 P1=/tmp/retoon-p1
 VENDOR_WIFI=/etc/network/wpa_supplicant.wlan0.conf
+VENDOR_THERMOSTAT=/qmf/config/config_happ_thermstat.xml
 ARCHIVE=$APP/retoon.tar.gz
 STEPS=7
 
@@ -188,6 +191,18 @@ if [ ! -s $OS/config/wpa_supplicant.conf ]; then
 	chmod 600 $OS/config/wpa_supplicant.conf
 	grep -q 'ssid=' $OS/config/wpa_supplicant.conf ||
 		fail "This Toon has no WiFi network set. Connect it to WiFi first."
+fi
+# the thermostat's preset temperatures and week program, as set here; a
+# failure leaves ReToon's defaults (the heating itself stays off either way)
+if [ ! -s $OS/config/thermostat.json ] && [ -s $VENDOR_THERMOSTAT ]; then
+	status working 4 "Taking over the thermostat program"
+	if awk -f $APP/thermostat.awk $VENDOR_THERMOSTAT > $OS/config/thermostat.json.new &&
+	   grep -q '"presets"' $OS/config/thermostat.json.new; then
+		mv $OS/config/thermostat.json.new $OS/config/thermostat.json
+	else
+		rm -f $OS/config/thermostat.json.new
+		log "the thermostat program could not be read; ReToon starts with its defaults"
+	fi
 fi
 # 5. the radio chip's firmware, as this Toon has it
 status working 5 "Copying the WiFi and Bluetooth firmware"
