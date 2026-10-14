@@ -179,9 +179,10 @@ rm -rf $OS/download
 status working 4 "Taking over the WiFi settings"
 if [ ! -s $OS/config/wpa_supplicant.conf ]; then
 	[ -s $VENDOR_WIFI ] || fail "This Toon has no WiFi settings to take over. Connect it to WiFi first."
+	# Only the networks and the country: ReToon's wpa_supplicant has no
+	# control interface, and a ctrl_interface line makes it refuse the file.
 	{
-		echo "ctrl_interface=/var/run/wpa_supplicant"
-		echo "update_config=1"
+		grep -m 1 '^[ \t]*country=' $VENDOR_WIFI
 		sed -n '/^[ \t]*network[ \t]*=[ \t]*{/,/^[ \t]*}/p' $VENDOR_WIFI
 	} > $OS/config/wpa_supplicant.conf
 	chmod 600 $OS/config/wpa_supplicant.conf

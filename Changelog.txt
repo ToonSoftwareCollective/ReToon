@@ -1,3 +1,7 @@
+1.0.4
+- Fix: WiFi did not connect after the install. The WiFi settings taken over
+  from the original software began with a line ReToon cannot read, so it
+  refused the whole file. Now only the networks and the country are copied.
 1.0.3
 - Fix: the button had to be pressed twice; the screen showed the old state
   again before the install had started.
