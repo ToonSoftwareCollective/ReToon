@@ -1,3 +1,8 @@
+1.0.8
+- New ReToon image (0.1.0-test7): "Check for update" and "Restart"
+  buttons on the Status page of the web interface. From now on a new
+  ReToon can be installed from there, without this app.
+- The Status page shows what the boiler module is doing while it starts.
 1.0.7
 - New ReToon image (0.1.0-test6): the boiler module is found reliably
   after a start; the Toon no longer shows "no boiler module" for half a
