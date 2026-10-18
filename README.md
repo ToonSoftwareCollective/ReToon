@@ -111,7 +111,7 @@ Thermostat settings: presets, week program, temperature sensors.
   unpacks it while it comes in (the archive itself is never stored). The
   images are not in this repository because the app is installed as a whole,
   and a Toon 1 has no room for both.
-- `files.sha256` and `files-toon1.sha256`: the files of each image with
+- `files-toon2.sha256` and `files-toon1.sha256`: the files of each image with
   their checksums. Files already on the Toon with the right checksum are
   kept, and every unpacked file is checked.
 - An archive placed next to the script by hand (`retoon-toon2.tar.gz` or
