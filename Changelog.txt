@@ -1,3 +1,6 @@
+1.0.11
+- The checksums of the Toon 2 image are now in files-toon2.sha256, next to
+  files-toon1.sha256 for the Toon 1.
 1.0.10
 - The ReToon images are no longer part of the app. The app downloads the
   one for its Toon (Toon 2 or Toon 1) from the ReToon-images repository

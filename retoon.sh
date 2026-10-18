@@ -33,7 +33,7 @@
 #                    "run boot_nand" starts the kernel partition. Once ReToon
 #                    has run they can be written from here too, and the start
 #                    command is set to ReToon's (see toon-boot in ReToon).
-# Files that are already there with the right checksum (files.sha256 next to
+# Files that are already there with the right checksum (files-toon2.sha256 next to
 # this script, files-toon1.sha256 on a Toon 1) are kept; the others are taken
 # from the image archive: retoon-toon2.tar.gz (retoon-toon1.tar.gz on a Toon 1).
 # That archive is downloaded from the address in "images.url" next to this
@@ -118,7 +118,7 @@ else
 fi
 asked=$(cat /tmp/retoon.board 2>/dev/null)
 [ -z "$asked" ] || [ "$asked" = $BOARD ] || fail "The app and this script do not agree on which Toon this is."
-SUMS=$APP/files.sha256
+SUMS=$APP/files-toon2.sha256
 if [ $BOARD = toon1 ]; then
 	SUMS=$APP/files-toon1.sha256
 	ARCHIVE=$APP/retoon-toon1.tar.gz
