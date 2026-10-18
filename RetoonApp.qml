@@ -1,5 +1,6 @@
 //
-// ReToon: sets up and starts ReToon from the original Toon 2 software.
+// ReToon: sets up and starts ReToon from the original Toon software, on a
+// Toon 2 or a Toon 1 (isNxt tells them apart).
 // The work is done by retoon.sh in this folder, which the "tsc" helper runs
 // as root when "external-retoon" is written to /tmp/tsc.command.
 //
@@ -45,6 +46,8 @@ App {
 			installAsked = Date.now();
 			staleStatus = lastStatus;
 		}
+		// retoon.sh checks for itself too; both must agree
+		writeFile("/tmp/retoon.board", isNxt ? "toon2" : "toon1");
 		writeFile("/tmp/retoon.request", what);
 		writeFile("/tmp/tsc.command", "external-retoon");
 		statusTimer.start();

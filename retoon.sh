@@ -1,5 +1,5 @@
 #!/bin/sh
-# ReToon setup, run on the original Toon 2 software.
+# ReToon setup, run on the original Toon software (Toon 2 and Toon 1).
 #
 # Started by the ReToon app through the "tsc" helper (which runs
 # <app>.sh of an app as root when the app writes "external-<app>" to
@@ -12,7 +12,7 @@
 # Progress goes to /tmp/retoon.status (JSON, read by the app) and to
 # /var/log/retoon.log. Set RETOON_NO_REBOOT=1 to stop before the restart.
 #
-# What "in place" means:
+# What "in place" means on a Toon 2:
 #   p3 (ext3)        toon2-zImage, toon2.dtb, toon2-initrd.cpio.gz.u-boot
 #   p4 /mnt/data     toon-os/rootfs.squashfs, toon-os/boot.scr,
 #                    toon-os/config/wpa_supplicant.conf (taken over from this
@@ -23,10 +23,21 @@
 #                    firmware, copied from this system (so a ReToon image
 #                    does not have to contain it)
 #   p1 (vfat)        boot.scr - what makes the next start go to ReToon
+# On a Toon 1 (raw NAND, original kernel in the "kernel" partition):
+#   kernel           uImage-toon1-flash, ReToon's kernel with its start-up
+#                    built in; the original kernel moves to "kernel-backup"
+#                    first (and a copy to toon-os/vendor-uImage)
+#   /mnt/data        toon-os/rootfs.squashfs (+ a copy of the kernel), WiFi
+#                    and thermostat settings as on the Toon 2
+#   U-Boot settings  untouched on a Toon that never ran ReToon: its own
+#                    "run boot_nand" starts the kernel partition. Once ReToon
+#                    has run they can be written from here too, and the start
+#                    command is set to ReToon's (see toon-boot in ReToon).
 # Files that are already there with the right checksum (files.sha256 next to
-# this script) are kept; the others are taken from retoon.tar.gz next to this
-# script. Without that archive they are fetched from the address in the file
-# "source.url" next to this script, if there is one.
+# this script, files-toon1.sha256 on a Toon 1) are kept; the others are taken
+# from retoon.tar.gz (retoon-toon1.tar.gz) next to this script. Without that
+# archive they are fetched from the address in the file "source.url" next to
+# this script, if there is one.
 
 APP=$(cd "$(dirname "$0")" && pwd)
 STATUS=/tmp/retoon.status
@@ -83,38 +94,117 @@ fail() {
 # Where a file belongs, and where a checked copy of it is now ("" = nowhere).
 home_of() {
 	case "$1" in
-	rootfs.squashfs|boot.scr) echo "$OS/$1" ;;
+	rootfs.squashfs|boot.scr|uImage-toon1-flash) echo "$OS/$1" ;;
 	*) echo "$P3/$1" ;;
 	esac
 }
-sum_of() { sed -n "s/^\([0-9a-f]\{64\}\)  $1\$/\1/p" "$APP/files.sha256"; }
+sum_of() { sed -n "s/^\([0-9a-f]\{64\}\)  $1\$/\1/p" "$SUMS"; }
 good() {	# path, name
 	[ -f "$1" ] && [ "$(sha256sum "$1" | cut -d ' ' -f 1)" = "$(sum_of "$2")" ]
 }
-FILES=$(sed 's/^[0-9a-f]*  //' "$APP/files.sha256" 2>/dev/null)
+# Which Toon: the Toon 2 has a device tree, the Toon 1's kernel is too old
+# for one. The app says which one it is on too (isNxt); both must agree.
+if grep -q 'i.MX6 SoloX' /proc/device-tree/model 2>/dev/null; then
+	BOARD=toon2
+elif grep -q 'ED2.0' /proc/cpuinfo 2>/dev/null; then
+	BOARD=toon1
+else
+	fail "ReToon does not know this Toon."
+fi
+asked=$(cat /tmp/retoon.board 2>/dev/null)
+[ -z "$asked" ] || [ "$asked" = $BOARD ] || fail "The app and this script do not agree on which Toon this is."
+SUMS=$APP/files.sha256
+if [ $BOARD = toon1 ]; then
+	SUMS=$APP/files-toon1.sha256
+	ARCHIVE=$APP/retoon-toon1.tar.gz
+fi
+FILES=$(sed 's/^[0-9a-f]*  //' "$SUMS" 2>/dev/null)
+[ -n "$FILES" ] || fail "The list of files ($(basename $SUMS)) is missing from the app."
 
-grep -q 'i.MX6 SoloX' /proc/device-tree/model 2>/dev/null ||
-	fail "This is not a Toon 2. ReToon only runs on a Toon 2."
-[ -n "$FILES" ] || fail "The list of files (files.sha256) is missing from the app."
-mount | grep -q ' /mnt/data ' || fail "The data partition is not there."
-mkdir -p $P3 $P1
-mount -o ro /dev/mmcblk3p3 $P3 2>/dev/null || fail "The third partition cannot be read."
+# --- Toon 1: the kernel partitions and the U-Boot settings ---
+mtd_of() { sed -n "s/^\(mtd[0-9]*\): .* \"$1\"\$/\1/p" /proc/mtd; }
+hexof() { hexdump -v -e '1/1 "%02x"'; }
+# name in a partition's uImage header ("" = no uImage there)
+image_name() {
+	[ "$(dd if=/dev/$1 bs=4 count=1 2>/dev/null | hexof)" = 27051956 ] || return
+	dd if=/dev/$1 bs=1 skip=32 count=32 2>/dev/null | tr -d '\000'
+}
+# the whole uImage in a partition (header + data) to a file
+image_copy() {	# mtd, file
+	len=$(( 0x$(dd if=/dev/$1 bs=1 skip=12 count=4 2>/dev/null | hexof) + 64 ))
+	dd if=/dev/$1 of=$2 bs=$len count=1 2>/dev/null && [ "$(wc -c < $2)" = $len ]
+}
+# is this file what the partition holds? (read in pages, then cut to size)
+flash_has() {	# mtd, file
+	size=$(wc -c < $2)
+	dd if=/dev/$1 of=/tmp/retoon-flash bs=2048 count=$(( (size + 2047) / 2048 )) 2>/dev/null
+	[ "$(dd if=/tmp/retoon-flash bs=$size count=1 2>/dev/null | sha256sum | cut -d ' ' -f 1)" = \
+	  "$(sha256sum < $2 | cut -d ' ' -f 1)" ]
+	ok=$?
+	rm -f /tmp/retoon-flash
+	return $ok
+}
+# The original software's flash_erase takes "0 0" as no blocks at all:
+# flash_eraseall erases the whole partition (and skips bad blocks).
+flash_write() {	# mtd, file
+	flash_eraseall -q /dev/$1 >> $LOG 2>&1 && nandwrite -p /dev/$1 $2 >> $LOG 2>&1 && flash_has $1 $2
+}
+# U-Boot settings: one copy of 128 KiB (4-byte CRC32, then name=value\0...).
+# busybox has no crc32, but gzip ends its output with the CRC32 of its input.
+env_read() {	# file for the name=value lines
+	nanddump -o -l 0x20000 -f /tmp/retoon-env.bin /dev/$ENV_MTD >> $LOG 2>&1 || return 1
+	dd if=/tmp/retoon-env.bin of=/tmp/retoon-env.body bs=4 skip=1 2>/dev/null
+	dd if=/tmp/retoon-env.bin of=/tmp/retoon-env.crc bs=4 count=1 2>/dev/null
+	[ "$(gzip -c /tmp/retoon-env.body | tail -c 8 | dd bs=4 count=1 2>/dev/null | hexof)" = \
+	  "$(hexof < /tmp/retoon-env.crc)" ] || return 1
+	tr '\000' '\n' < /tmp/retoon-env.body | awk '$0 == "" { exit } { print }' > $1
+}
+env_write() {	# file with the name=value lines
+	{ tr '\n' '\000' < $1; printf '\000'; } > /tmp/retoon-env.data
+	dd if=/dev/zero of=/tmp/retoon-env.pad bs=131068 count=1 2>/dev/null
+	dd if=/tmp/retoon-env.data of=/tmp/retoon-env.pad conv=notrunc 2>/dev/null
+	gzip -c /tmp/retoon-env.pad | tail -c 8 | dd bs=4 count=1 2>/dev/null > /tmp/retoon-env.crc
+	cat /tmp/retoon-env.crc /tmp/retoon-env.pad > /tmp/retoon-env.new
+	[ "$(wc -c < /tmp/retoon-env.new)" = 131072 ] || return 1
+	flash_write $ENV_MTD /tmp/retoon-env.new
+}
+env_writable() { ! grep -q '(u-boot-env)ro' /proc/cmdline; }
+RETOON_BOOTCMD='setenv bootcmd run boot_nand_backup; saveenv; run boot_retoon'
+RETOON_BOOT='nand read 0xa2000000 0x300000 0x300000; bootm 0xa2000000'
+
+if [ $BOARD = toon2 ]; then
+	mount | grep -q ' /mnt/data ' || fail "The data partition is not there."
+	mkdir -p $P3 $P1
+	mount -o ro /dev/mmcblk3p3 $P3 2>/dev/null || fail "The third partition cannot be read."
+else
+	[ -d /mnt/data ] || fail "The data folder is not there."
+	KERNEL_MTD=$(mtd_of kernel); BACKUP_MTD=$(mtd_of kernel-backup); ENV_MTD=$(mtd_of u-boot-env)
+	[ -n "$KERNEL_MTD" ] && [ -n "$BACKUP_MTD" ] && [ -n "$ENV_MTD" ] ||
+		fail "The flash partitions of this Toon are not as expected."
+fi
 
 missing=""
 for f in $FILES; do
 	good "$(home_of $f)" $f || missing="$missing $f"
 done
+# on a Toon 1 the kernel must also be in its partition
+kernel_in_place=1
+if [ $BOARD = toon1 ]; then
+	good "$OS/uImage-toon1-flash" uImage-toon1-flash && flash_has $KERNEL_MTD "$OS/uImage-toon1-flash" ||
+		kernel_in_place=0
+fi
 
 if [ "$ACTION" = check ]; then
 	cleanup
-	if [ -z "$missing" ]; then
+	if [ -z "$missing" ] && [ $kernel_in_place = 1 ]; then
 		status ready 0 "ReToon is on this Toon. Press the button to start it."
 	elif [ -s "$ARCHIVE" ] || [ -s "$APP/source.url" ]; then
 		n=$(echo $missing | wc -w)
+		[ $n = 0 ] && n=1	# only the kernel partition
 		[ $n = 1 ] && what="1 file" || what="$n files"
 		status needed 0 "ReToon is not on this Toon yet ($what to put in place). Press the button to install and start it."
 	else
-		status error 0 "ReToon is not on this Toon yet and the app has neither its archive (retoon.tar.gz) nor a download address."
+		status error 0 "ReToon is not on this Toon yet and the app has neither its archive ($(basename $ARCHIVE)) nor a download address."
 	fi
 	exit 0
 fi
@@ -127,7 +217,8 @@ if [ -n "$missing" ]; then
 	[ -s "$ARCHIVE" ] || [ -n "$url" ] ||
 		fail "Files are missing and the app has neither its archive (retoon.tar.gz) nor a download address."
 	free=$(df -k /mnt/data | tail -n 1 | awk '{print $4}')
-	[ "$free" -gt 60000 ] || fail "Not enough room on the data partition."
+	need=60000; [ $BOARD = toon1 ] && need=15000	# kB: what gets unpacked
+	[ "$free" -gt $need ] || fail "Not enough room on the data partition."
 	mkdir -p $OS/download
 	if [ -s "$ARCHIVE" ]; then
 		# the files sit in one folder inside the archive
@@ -161,13 +252,44 @@ for f in $missing; do
 	esac
 done
 
-# 3. kernel and start-up files, on the third partition
+# 3. kernel and start-up files: on the third partition (Toon 2), in the
+#    kernel partition (Toon 1)
 status working 3 "Putting the start-up files in place"
+if [ $BOARD = toon1 ]; then
+	# The original kernel stays: before ReToon's goes into "kernel", the
+	# original one must be safe in "kernel-backup".
+	in_kernel=$(image_name $KERNEL_MTD)
+	case "$in_kernel" in
+	toon1-retoon*) ;;
+	Linux-*)
+		status working 3 "Keeping the original kernel"
+		image_copy $KERNEL_MTD $OS/vendor-uImage.new || fail "Cannot read the original kernel."
+		mv $OS/vendor-uImage.new $OS/vendor-uImage
+		if ! flash_has $BACKUP_MTD $OS/vendor-uImage; then
+			flash_write $BACKUP_MTD $OS/vendor-uImage || fail "Cannot keep the original kernel."
+		fi ;;
+	*)
+		# an earlier attempt that stopped while writing ReToon's kernel:
+		# the original one is already safe in kernel-backup
+		[ -s $OS/vendor-uImage ] && flash_has $BACKUP_MTD $OS/vendor-uImage ||
+			fail "The kernel partition holds something unknown (${in_kernel:-no kernel})."
+		log "kernel partition: unfinished earlier write, the original kernel is in kernel-backup" ;;
+	esac
+	case "$(image_name $BACKUP_MTD)" in
+	Linux-*) ;;
+	*) fail "The original kernel is not in its place (kernel-backup); nothing was changed." ;;
+	esac
+	if ! flash_has $KERNEL_MTD $OS/uImage-toon1-flash; then
+		status working 3 "Writing the ReToon kernel"
+		flash_write $KERNEL_MTD $OS/uImage-toon1-flash ||
+			fail "Writing the ReToon kernel failed. Do not restart the Toon: press the button again."
+	fi
+fi
 need_p3=""
 for f in $missing; do
 	case "$(home_of $f)" in $P3/*) need_p3="$need_p3 $f" ;; esac
 done
-if [ -n "$need_p3" ]; then
+if [ $BOARD = toon2 ] && [ -n "$need_p3" ]; then
 	mount -o remount,rw $P3 || fail "The third partition cannot be written."
 	for f in $need_p3; do
 		cp "$OS/download/$f" "$P3/$f.new" && sync && mv "$P3/$f.new" "$P3/$f" ||
@@ -175,12 +297,15 @@ if [ -n "$need_p3" ]; then
 	done
 	sync
 fi
-umount $P3
+[ $BOARD = toon2 ] && umount $P3
 rm -rf $OS/download
 
 # 4. WiFi: ReToon uses the network this Toon is on now
 status working 4 "Taking over the WiFi settings"
 if [ ! -s $OS/config/wpa_supplicant.conf ]; then
+	if [ ! -s $VENDOR_WIFI ] && [ $BOARD = toon1 ]; then
+		log "no WiFi settings to take over; ReToon uses the ethernet port"
+	else
 	[ -s $VENDOR_WIFI ] || fail "This Toon has no WiFi settings to take over. Connect it to WiFi first."
 	# Only the networks and the country: ReToon's wpa_supplicant has no
 	# control interface, and a ctrl_interface line makes it refuse the file.
@@ -191,6 +316,7 @@ if [ ! -s $OS/config/wpa_supplicant.conf ]; then
 	chmod 600 $OS/config/wpa_supplicant.conf
 	grep -q 'ssid=' $OS/config/wpa_supplicant.conf ||
 		fail "This Toon has no WiFi network set. Connect it to WiFi first."
+	fi
 fi
 # the thermostat's preset temperatures and week program, as set here; a
 # failure leaves ReToon's defaults (the heating itself stays off either way)
@@ -204,7 +330,9 @@ if [ ! -s $OS/config/thermostat.json ] && [ -s $VENDOR_THERMOSTAT ]; then
 		log "the thermostat program could not be read; ReToon starts with its defaults"
 	fi
 fi
-# 5. the radio chip's firmware, as this Toon has it
+# 5. the radio chip's firmware, as this Toon has it (Toon 2; the Toon 1's
+#    WiFi stick needs none from here)
+if [ $BOARD = toon2 ]; then
 status working 5 "Copying the WiFi and Bluetooth firmware"
 FW=$OS/firmware/brcm
 mkdir -p $FW
@@ -217,18 +345,41 @@ hcd=$(ls /etc/firmware/BCM43430A1*.hcd /lib/firmware/brcm/BCM43430A1*.hcd 2>/dev
 [ -n "$hcd" ] && cp "$hcd" $FW/BCM43430A1.hcd
 [ -s $FW/brcmfmac43430-sdio.bin ] && [ -s $FW/brcmfmac43430-sdio.txt ] ||
 	log "no WiFi firmware found on this system; ReToon will use what its own image has"
+fi
 
 # asking for ReToon here also means: keep starting it
 rm -f $OS/config/no-autoboot
 sync
 
-# 6. the boot script: the next start goes to ReToon
+# 6. the boot script (Toon 2) or the U-Boot start command (Toon 1): the next
+#    start goes to ReToon
 status working 6 "Preparing the restart"
+if [ $BOARD = toon1 ]; then
+	env_read /tmp/retoon-env.txt || fail "Cannot read the U-Boot settings."
+	cmd=$(sed -n 's/^bootcmd=//p' /tmp/retoon-env.txt)
+	if env_writable; then
+		# ReToon ran here before: its start command, one-shot as ReToon
+		# expects (it sets it back once it is up)
+		if [ "$cmd" != "$RETOON_BOOTCMD" ] || ! grep -q '^boot_retoon=' /tmp/retoon-env.txt; then
+			grep -v '^bootcmd=\|^boot_retoon=' /tmp/retoon-env.txt > /tmp/retoon-env.set
+			echo "boot_retoon=$RETOON_BOOT" >> /tmp/retoon-env.set
+			echo "bootcmd=$RETOON_BOOTCMD" >> /tmp/retoon-env.set
+			env_write /tmp/retoon-env.set || fail "Cannot write the U-Boot settings."
+		fi
+	else
+		# never ran ReToon: U-Boot's own command starts the kernel partition,
+		# which now holds ReToon
+		[ "$cmd" = "run boot_nand" ] ||
+			fail "This Toon starts in an unknown way (bootcmd=$cmd); nothing more was changed."
+	fi
+	rm -f /tmp/retoon-env.*
+else
 good $OS/boot.scr boot.scr || fail "The boot script is damaged."
 mount -t vfat /dev/mmcblk3p1 $P1 || fail "The boot partition cannot be written."
 cp $OS/boot.scr $P1/boot.new && sync && mv $P1/boot.new $P1/boot.scr || fail "Cannot write the boot script."
 sync
 umount $P1
+fi
 
 # 7. restart
 if [ -n "$RETOON_NO_REBOOT" ]; then

@@ -1,3 +1,11 @@
+1.0.9
+- The app also works on a Toon 1. There it keeps the original kernel in
+  the second kernel partition, puts ReToon's kernel in the first one and
+  restarts. Without "Always start ReToon" a later restart goes back to the
+  original software, as on the Toon 2. The Toon 1 image comes with the app
+  (retoon-toon1.tar.gz).
+- New ReToon image (0.1.0-test8): settings page loads faster and says
+  "loading" until the values are there; brightness changes show at once.
 1.0.8
 - New ReToon image (0.1.0-test7): "Check for update" and "Restart"
   buttons on the Status page of the web interface. From now on a new

@@ -34,7 +34,7 @@ Screen {
 		text: "ReToon turns this Toon into an open wall panel and thermostat that works with Home Assistant. " +
 		      "It is installed next to the original software: nothing is removed, and you can come back here " +
 		      "from the ReToon web interface (Settings, System, Starting up).\n\n" +
-		      "The button below puts ReToon in place, takes over the WiFi settings of this Toon and restarts it. " +
+		      "The button below puts ReToon in place, takes over the " + (isNxt ? "WiFi" : "network") + " settings of this Toon and restarts it. " +
 		      "After the restart the address of the web interface is shown on the screen (tap the Home Assistant icon)."
 	}
 
