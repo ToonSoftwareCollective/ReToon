@@ -102,24 +102,26 @@ Thermostat settings: presets, week program, temperature sensors.
   `/tmp/retoon.request` and `external-retoon` to `/tmp/tsc.command`; the
   helper then runs this script as root. Progress is in `/tmp/retoon.status`
   (JSON) and `/var/log/retoon.log`.
-- `images.url`: where the ReToon images of this app version are: a release
-  of [ReToon-images](https://github.com/ToonSoftwareCollective/ReToon-images)
-  with `retoon-toon2.tar.gz` (Toon 2, the five files it needs: kernel, device tree,
-  initrd, system image, boot script) and `retoon-toon1.tar.gz` (Toon 1, two
-  files: the kernel with ReToon's start-up built in, and the system image).
-  When the button is pressed, the app downloads the archive for its Toon and
-  unpacks it while it comes in (the archive itself is never stored). The
-  images are not in this repository because the app is installed as a whole,
-  and a Toon 1 has no room for both.
-- `files-toon2.sha256` and `files-toon1.sha256`: the files of each image with
-  their checksums. Files already on the Toon with the right checksum are
-  kept, and every unpacked file is checked.
+- `images.url`: where the ReToon images are: the newest release of
+  [ReToon-images](https://github.com/ToonSoftwareCollective/ReToon-images),
+  with `retoon-toon2.tar.gz` (Toon 2, the five files it needs: kernel, device
+  tree, initrd, system image, boot script) and `retoon-toon1.tar.gz` (Toon 1,
+  two files: the kernel with ReToon's start-up built in, and the system
+  image), and next to them `files-toon2.sha256` and `files-toon1.sha256`:
+  the files of each image with their checksums. The app first reads that
+  list, keeps the files already on the Toon with the right checksum, then
+  downloads the archive for its Toon, unpacks it while it comes in (the
+  archive itself is never stored) and checks every file. So the app always
+  installs the newest image, and a new image needs no new app. The images
+  are not in this repository because the app is installed as a whole, and a
+  Toon 1 has no room for both.
 - An archive placed next to the script by hand (`retoon-toon2.tar.gz` or
-  `retoon-toon1.tar.gz`) is used instead of the download, for a Toon without
-  internet.
+  `retoon-toon1.tar.gz`) is used instead of the download, with the
+  `files.sha256` inside it, for a Toon without internet.
 - `source.url` (optional, not included): one line with an address to fetch
-  the files from one by one, as `<address>/<file name>`, used only when there
-  is neither an archive nor `images.url`.
+  the files from one by one, as `<address>/<file name>`, together with a
+  `files-toon2.sha256` (`files-toon1.sha256`) next to the script; used only
+  when there is neither an archive nor `images.url`.
 
 ## What the button does
 
