@@ -1,3 +1,9 @@
+1.0.10
+- The ReToon images are no longer part of the app. The app downloads the
+  one for its Toon (Toon 2 or Toon 1) from the ReToon-images repository
+  when you press the button, checks every file, and removes the download
+  afterwards. The app itself is now small enough for a Toon 1.
+- Same ReToon image as 1.0.9 (0.1.0-test8).
 1.0.9
 - The app also works on a Toon 1. There it keeps the original kernel in
   the second kernel partition, puts ReToon's kernel in the first one and
