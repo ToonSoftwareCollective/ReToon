@@ -102,23 +102,31 @@ Thermostat settings: presets, week program, temperature sensors.
   `/tmp/retoon.request` and `external-retoon` to `/tmp/tsc.command`; the
   helper then runs this script as root. Progress is in `/tmp/retoon.status`
   (JSON) and `/var/log/retoon.log`.
-- `retoon.tar.gz`: ReToon for the Toon 2, the five files it needs (kernel,
-  device tree, initrd, system image, boot script). The app unpacks what is
-  missing from it; nothing is downloaded.
-- `files.sha256`: those five files with their checksums. Files already on the
-  Toon with the right checksum are kept, and every unpacked file is checked.
-- `retoon-toon1.tar.gz` and `files-toon1.sha256`: the same for the Toon 1,
-  two files (the kernel with ReToon's start-up built in, and the system
-  image).
+- `images.url`: where the ReToon images of this app version are: a release
+  of [ReToon-images](https://github.com/ToonSoftwareCollective/ReToon-images)
+  with `retoon-toon2.tar.gz` (Toon 2, the five files it needs: kernel, device tree,
+  initrd, system image, boot script) and `retoon-toon1.tar.gz` (Toon 1, two
+  files: the kernel with ReToon's start-up built in, and the system image).
+  When the button is pressed, the app downloads the archive for its Toon and
+  unpacks it while it comes in (the archive itself is never stored). The
+  images are not in this repository because the app is installed as a whole,
+  and a Toon 1 has no room for both.
+- `files.sha256` and `files-toon1.sha256`: the files of each image with
+  their checksums. Files already on the Toon with the right checksum are
+  kept, and every unpacked file is checked.
+- An archive placed next to the script by hand (`retoon-toon2.tar.gz` or
+  `retoon-toon1.tar.gz`) is used instead of the download, for a Toon without
+  internet.
 - `source.url` (optional, not included): one line with an address to fetch
-  the files from, as `<address>/<file name>`, used only when `retoon.tar.gz`
-  is not there.
+  the files from one by one, as `<address>/<file name>`, used only when there
+  is neither an archive nor `images.url`.
 
 ## What the button does
 
 On a Toon 2:
 
-1. Unpacks the files that are missing from `retoon.tar.gz` and checks them.
+1. Downloads `retoon-toon2.tar.gz`, unpacks the files that are missing and checks
+   them.
 2. Puts the system image on the data partition (`/mnt/data/toon-os/`).
 3. Puts kernel, device tree and initrd on the third partition, next to the
    recovery files.
@@ -132,7 +140,7 @@ On a Toon 2:
 
 On a Toon 1 (the app and the script both check which Toon it is):
 
-1. Unpacks the two files from `retoon-toon1.tar.gz` and checks them.
+1. Downloads `retoon-toon1.tar.gz`, unpacks the two files and checks them.
 2. Puts the system image in `/mnt/data/toon-os/`.
 3. Copies the original kernel from the kernel partition to the second kernel
    partition (and to `/mnt/data/toon-os/vendor-uImage`), checks it, and only
