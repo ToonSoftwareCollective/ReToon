@@ -33,9 +33,11 @@
 #                    "run boot_nand" starts the kernel partition. Once ReToon
 #                    has run they can be written from here too, and the start
 #                    command is set to ReToon's (see toon-boot in ReToon).
-# Files that are already there with the right checksum (files-toon2.sha256 next to
-# this script, files-toon1.sha256 on a Toon 1) are kept; the others are taken
-# from the image archive: retoon-toon2.tar.gz (retoon-toon1.tar.gz on a Toon 1).
+# Which files make up ReToon comes with the image: files-toon2.sha256
+# (files-toon1.sha256 on a Toon 1) in the newest release of ReToon-images,
+# or files.sha256 inside an archive placed here by hand. Files that are
+# already there with the right checksum are kept; the others are taken from
+# the image archive: retoon-toon2.tar.gz (retoon-toon1.tar.gz on a Toon 1).
 # That archive is downloaded from the address in "images.url" next to this
 # script (a release of ReToon-images) and unpacked while it comes in, so it
 # is never stored whole (a Toon 1 has little room); an archive placed next
@@ -118,13 +120,26 @@ else
 fi
 asked=$(cat /tmp/retoon.board 2>/dev/null)
 [ -z "$asked" ] || [ "$asked" = $BOARD ] || fail "The app and this script do not agree on which Toon this is."
-SUMS=$APP/files-toon2.sha256
-if [ $BOARD = toon1 ]; then
-	SUMS=$APP/files-toon1.sha256
-	ARCHIVE=$APP/retoon-toon1.tar.gz
+[ $BOARD = toon1 ] && ARCHIVE=$APP/retoon-toon1.tar.gz
+# Which files the image has, with their checksums: from an archive placed
+# next to this script (its own files.sha256), or else from the newest
+# release of ReToon-images (files-toon2.sha256 / files-toon1.sha256 next to
+# the archives there). So a new image needs no new app.
+images=$(head -n 1 "$APP/images.url" 2>/dev/null | tr -d '\r\n')
+SUMS=/tmp/retoon-files.sha256
+rm -f $SUMS
+if [ -s "$ARCHIVE" ]; then
+	inner=$(tar -tzf "$ARCHIVE" 2>> $LOG | grep '/files.sha256$' | head -n 1)
+	[ -n "$inner" ] && tar -xzOf "$ARCHIVE" "$inner" > $SUMS 2>> $LOG
+elif [ -n "$images" ]; then
+	curl -fsSL --connect-timeout 20 --retry 2 -o $SUMS "${images%/}/files-$BOARD.sha256" >> $LOG 2>&1 ||
+		fail "Cannot reach the ReToon images. Is the Toon connected to the internet?"
+elif [ -s "$APP/files-$BOARD.sha256" ]; then
+	cp "$APP/files-$BOARD.sha256" $SUMS	# with source.url, as older apps had
 fi
-FILES=$(sed 's/^[0-9a-f]*  //' "$SUMS" 2>/dev/null)
-[ -n "$FILES" ] || fail "The list of files ($(basename $SUMS)) is missing from the app."
+# only plain file names: they become paths below
+FILES=$(sed -n 's/^[0-9a-f]\{64\}  \([A-Za-z0-9._-]*\)$/\1/p' "$SUMS" 2>/dev/null)
+[ -n "$FILES" ] || fail "Cannot find out which files ReToon needs (no images.url or archive)."
 
 # --- Toon 1: the kernel partitions and the U-Boot settings ---
 mtd_of() { sed -n "s/^\(mtd[0-9]*\): .* \"$1\"\$/\1/p" /proc/mtd; }
@@ -220,7 +235,6 @@ fi
 #    either, file by file from source.url
 if [ -n "$missing" ]; then
 	url=$(head -n 1 "$APP/source.url" 2>/dev/null | tr -d '\r\n')
-	images=$(head -n 1 "$APP/images.url" 2>/dev/null | tr -d '\r\n')
 	[ -s "$ARCHIVE" ] || [ -n "$images" ] || [ -n "$url" ] ||
 		fail "Files are missing and the app has no download address (images.url)."
 	free=$(df -k /mnt/data | tail -n 1 | awk '{print $4}')

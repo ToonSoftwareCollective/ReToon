@@ -1,3 +1,7 @@
+1.0.12
+- The app always installs the newest ReToon image: it reads which files
+  that image has, and their checksums, from the ReToon-images repository.
+  A new image no longer needs a new version of the app.
 1.0.11
 - The checksums of the Toon 2 image are now in files-toon2.sha256, next to
   files-toon1.sha256 for the Toon 1.
