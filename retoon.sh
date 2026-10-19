@@ -181,8 +181,13 @@ env_read() {	# file for the name=value lines
 }
 env_write() {	# file with the name=value lines
 	{ tr '\n' '\000' < $1; printf '\000'; } > /tmp/retoon-env.data
-	dd if=/dev/zero of=/tmp/retoon-env.pad bs=131068 count=1 2>/dev/null
-	dd if=/tmp/retoon-env.data of=/tmp/retoon-env.pad conv=notrunc 2>/dev/null
+	n=$(wc -c < /tmp/retoon-env.data)
+	[ $n -gt 1 ] && [ $n -le 131068 ] || return 1
+	# padded with zeros by appending: the original software's busybox dd
+	# has no conv=notrunc (it would fail and leave only zeros)
+	{ cat /tmp/retoon-env.data; dd if=/dev/zero bs=$((131068 - n)) count=1 2>/dev/null; } > /tmp/retoon-env.pad
+	[ "$(wc -c < /tmp/retoon-env.pad)" = 131068 ] || return 1
+	[ "$(dd if=/tmp/retoon-env.pad bs=$n count=1 2>/dev/null | md5sum)" = "$(md5sum < /tmp/retoon-env.data)" ] || return 1
 	gzip -c /tmp/retoon-env.pad | tail -c 8 | dd bs=4 count=1 2>/dev/null > /tmp/retoon-env.crc
 	cat /tmp/retoon-env.crc /tmp/retoon-env.pad > /tmp/retoon-env.new
 	[ "$(wc -c < /tmp/retoon-env.new)" = 131072 ] || return 1

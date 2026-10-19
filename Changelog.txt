@@ -1,3 +1,8 @@
+1.0.13
+- Toon 1: switching back to ReToon from the original software no longer
+  empties the U-Boot settings. On Toons with an older busybox the settings
+  were written empty, and the Toon then stopped at the U-Boot prompt. The
+  app now checks what it writes and writes nothing if it is not right.
 1.0.12
 - The app always installs the newest ReToon image: it reads which files
   that image has, and their checksums, from the ReToon-images repository.
