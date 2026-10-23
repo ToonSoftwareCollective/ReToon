@@ -144,22 +144,64 @@ FILES=$(sed -n 's/^[0-9a-f]\{64\}  \([A-Za-z0-9._-]*\)$/\1/p' "$SUMS" 2>/dev/nul
 # --- Toon 1: the kernel partitions and the U-Boot settings ---
 mtd_of() { sed -n "s/^\(mtd[0-9]*\): .* \"$1\"\$/\1/p" /proc/mtd; }
 hexof() { hexdump -v -e '1/1 "%02x"'; }
+# Reading a partition: like U-Boot's "nand read", a bad block is skipped and
+# the next good one follows (plain reads of /dev/mtdN stop at a bad block
+# with an I/O error). nanddump's output is cut to the length asked for.
+# The reason of a failure ends up in $REASON (and the log).
+# nanddump changed its mind about "-o": the old one (the original software)
+# includes the spare bytes of every page unless -o is given, the new one
+# (ReToon) leaves them out unless -o is given. Find out once from the size
+# of one block.
+nd_opts() {
+	[ -n "$ND_OPTS" ] && return
+	nanddump -l 0x20000 -f /tmp/retoon-nd /dev/$1 > /dev/null 2>&1
+	case "$(wc -c < /tmp/retoon-nd 2>/dev/null)" in
+	131072) ND_OPTS="--bb=skipbad" ;;
+	*) ND_OPTS="-o --bb=skipbad" ;;
+	esac
+	rm -f /tmp/retoon-nd
+}
+flash_read() {	# mtd, bytes, file
+	REASON=""
+	nd_opts $1
+	# one block more than the data needs, for a skipped bad block, within
+	# the partition
+	blocks=$(( ($2 + 131071) / 131072 + 1 ))
+	have=$(( 0x$(sed -n "s/^$1: \([0-9a-f]*\) .*/\1/p" /proc/mtd) / 131072 ))
+	[ $blocks -le $have ] || blocks=$have
+	if nanddump $ND_OPTS -l $(( blocks * 131072 )) -f /tmp/retoon-read /dev/$1 2> /tmp/retoon-read.err; then
+		:
+	else
+		# an older nanddump without --bb: hope for no bad block
+		nanddump ${ND_OPTS%--bb=skipbad} -l $(( blocks * 131072 )) -f /tmp/retoon-read /dev/$1 2> /tmp/retoon-read.err ||
+		dd if=/dev/$1 of=/tmp/retoon-read bs=131072 count=$blocks 2> /tmp/retoon-read.err
+	fi
+	dd if=/tmp/retoon-read of=$3 bs=$2 count=1 2>> /tmp/retoon-read.err
+	rm -f /tmp/retoon-read
+	if [ "$(wc -c < $3 2>/dev/null)" = $2 ]; then rm -f /tmp/retoon-read.err; return 0; fi
+	REASON=$(grep -v '^$' /tmp/retoon-read.err | tail -n 1 | tr -d '"')
+	log "flash_read $1 $2: $REASON (got $(wc -c < $3 2>/dev/null) bytes)"
+	rm -f /tmp/retoon-read.err
+	return 1
+}
 # name in a partition's uImage header ("" = no uImage there)
 image_name() {
-	[ "$(dd if=/dev/$1 bs=4 count=1 2>/dev/null | hexof)" = 27051956 ] || return
-	dd if=/dev/$1 bs=1 skip=32 count=32 2>/dev/null | tr -d '\000'
+	flash_read $1 64 /tmp/retoon-hdr || return
+	[ "$(dd if=/tmp/retoon-hdr bs=4 count=1 2>/dev/null | hexof)" = 27051956 ] || return
+	dd if=/tmp/retoon-hdr bs=1 skip=32 count=32 2>/dev/null | tr -d '\000'
 }
 # the whole uImage in a partition (header + data) to a file
 image_copy() {	# mtd, file
-	len=$(( 0x$(dd if=/dev/$1 bs=1 skip=12 count=4 2>/dev/null | hexof) + 64 ))
-	dd if=/dev/$1 of=$2 bs=$len count=1 2>/dev/null && [ "$(wc -c < $2)" = $len ]
+	flash_read $1 64 /tmp/retoon-hdr || return
+	len=$(( 0x$(dd if=/tmp/retoon-hdr bs=1 skip=12 count=4 2>/dev/null | hexof) + 64 ))
+	[ $len -gt 64 ] && [ $len -le 3145728 ] || { REASON="odd size in the kernel header"; return 1; }
+	flash_read $1 $len $2
 }
-# is this file what the partition holds? (read in pages, then cut to size)
+# is this file what the partition holds?
 flash_has() {	# mtd, file
 	size=$(wc -c < $2)
-	dd if=/dev/$1 of=/tmp/retoon-flash bs=2048 count=$(( (size + 2047) / 2048 )) 2>/dev/null
-	[ "$(dd if=/tmp/retoon-flash bs=$size count=1 2>/dev/null | sha256sum | cut -d ' ' -f 1)" = \
-	  "$(sha256sum < $2 | cut -d ' ' -f 1)" ]
+	flash_read $1 $size /tmp/retoon-flash || { rm -f /tmp/retoon-flash; return 1; }
+	[ "$(sha256sum < /tmp/retoon-flash | cut -d ' ' -f 1)" = "$(sha256sum < $2 | cut -d ' ' -f 1)" ]
 	ok=$?
 	rm -f /tmp/retoon-flash
 	return $ok
@@ -308,16 +350,23 @@ if [ $BOARD = toon1 ]; then
 	toon1-retoon*) ;;
 	Linux-*)
 		status working 3 "Keeping the original kernel"
-		image_copy $KERNEL_MTD $OS/vendor-uImage.new || fail "Cannot read the original kernel."
-		mv $OS/vendor-uImage.new $OS/vendor-uImage
-		if ! flash_has $BACKUP_MTD $OS/vendor-uImage; then
-			flash_write $BACKUP_MTD $OS/vendor-uImage || fail "Cannot keep the original kernel."
-		fi ;;
+		# read it into memory first: the data partition may be nearly
+		# full, and a copy there is only a convenience for later checks
+		image_copy $KERNEL_MTD /tmp/vendor-uImage ||
+			fail "Cannot read the original kernel${REASON:+ ($REASON)}. Nothing was changed."
+		if ! flash_has $BACKUP_MTD /tmp/vendor-uImage; then
+			flash_write $BACKUP_MTD /tmp/vendor-uImage ||
+				fail "Cannot keep the original kernel${REASON:+ ($REASON)}. Nothing was changed in the kernel partition."
+		fi
+		rm -f $OS/vendor-uImage.new
+		cp /tmp/vendor-uImage $OS/vendor-uImage.new 2>> $LOG && mv $OS/vendor-uImage.new $OS/vendor-uImage ||
+			{ rm -f $OS/vendor-uImage.new; log "no room for a copy of the original kernel on the data partition (it is in kernel-backup)"; }
+		rm -f /tmp/vendor-uImage ;;
 	*)
 		# an earlier attempt that stopped while writing ReToon's kernel:
 		# the original one is already safe in kernel-backup
-		[ -s $OS/vendor-uImage ] && flash_has $BACKUP_MTD $OS/vendor-uImage ||
-			fail "The kernel partition holds something unknown (${in_kernel:-no kernel})."
+		case "$(image_name $BACKUP_MTD)" in Linux-*) ;; *)
+			fail "The kernel partition holds something unknown (${in_kernel:-no kernel})." ;; esac
 		log "kernel partition: unfinished earlier write, the original kernel is in kernel-backup" ;;
 	esac
 	case "$(image_name $BACKUP_MTD)" in
@@ -327,7 +376,7 @@ if [ $BOARD = toon1 ]; then
 	if ! flash_has $KERNEL_MTD $OS/uImage-toon1-flash; then
 		status working 3 "Writing the ReToon kernel"
 		flash_write $KERNEL_MTD $OS/uImage-toon1-flash ||
-			fail "Writing the ReToon kernel failed. Do not restart the Toon: press the button again."
+			fail "Writing the ReToon kernel failed${REASON:+ ($REASON)}. Do not restart the Toon: press the button again."
 	fi
 fi
 need_p3=""

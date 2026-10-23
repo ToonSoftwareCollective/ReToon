@@ -1,3 +1,9 @@
+1.0.14
+- Toon 1: "Cannot read the original kernel" on some Toons. The app now
+  reads the kernel partition the way U-Boot does (a bad block in the NAND
+  is skipped), keeps the copy of the original kernel in memory instead of
+  on the nearly full data partition, and says what went wrong when a read
+  or write fails.
 1.0.13
 - Toon 1: switching back to ReToon from the original software no longer
   empties the U-Boot settings. On Toons with an older busybox the settings
