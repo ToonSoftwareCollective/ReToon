@@ -1,3 +1,7 @@
+1.0.15
+- The Z-Wave network keys of the original software (S0 and S2) are taken
+  over into ReToon at install, next to the WiFi settings and the thermostat
+  program. ReToon shows them on its Z-Wave card for Z-Wave JS. Both Toons.
 1.0.14
 - Toon 1: "Cannot read the original kernel" on some Toons. The app now
   reads the kernel partition the way U-Boot does (a bad block in the NAND

@@ -52,6 +52,7 @@ P3=/tmp/retoon-p3
 P1=/tmp/retoon-p1
 VENDOR_WIFI=/etc/network/wpa_supplicant.wlan0.conf
 VENDOR_THERMOSTAT=/qmf/config/config_happ_thermstat.xml
+VENDOR_ZWAVE_KEYS=/qmf/var/hdrv_zwave/s2keystore.xml
 ARCHIVE=$APP/retoon-toon2.tar.gz
 STEPS=7
 
@@ -411,6 +412,13 @@ if [ ! -s $OS/config/wpa_supplicant.conf ]; then
 	grep -q 'ssid=' $OS/config/wpa_supplicant.conf ||
 		fail "This Toon has no WiFi network set. Connect it to WiFi first."
 	fi
+fi
+# the Z-Wave network keys of the original software (S0 and S2), for Z-Wave
+# JS: the network itself lives in the Z-Wave chip, the keys do not
+if [ ! -s $OS/config/zwave-keys.xml ] && [ -s $VENDOR_ZWAVE_KEYS ]; then
+	status working 4 "Taking over the Z-Wave network keys"
+	cp $VENDOR_ZWAVE_KEYS $OS/config/zwave-keys.xml.new && mv $OS/config/zwave-keys.xml.new $OS/config/zwave-keys.xml
+	chmod 600 $OS/config/zwave-keys.xml 2>/dev/null
 fi
 # the thermostat's preset temperatures and week program, as set here; a
 # failure leaves ReToon's defaults (the heating itself stays off either way)
