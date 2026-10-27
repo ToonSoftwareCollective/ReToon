@@ -33,7 +33,7 @@ Screen {
 		wrapMode: Text.WordWrap
 		text: "ReToon turns this Toon into an open wall panel and thermostat that works with Home Assistant. " +
 		      "It is installed next to the original software: nothing is removed, and you can come back here " +
-		      "from the ReToon web interface (Settings, System, Starting up).\n\n" +
+		      "from the ReToon web interface (System tab, Starting up).\n\n" +
 		      "The button below puts ReToon in place, takes over the " + (isNxt ? "WiFi" : "network") + " settings of this Toon and restarts it. " +
 		      "After the restart the address of the web interface is shown on the screen (tap the Home Assistant icon)."
 	}
@@ -68,5 +68,39 @@ Screen {
 		}
 		topClickMargin: 2
 		onClicked: app.request("install")
+	}
+
+	// Toon 1 only: its flash is nearly full
+	StandardButton {
+		id: cleanButton
+		visible: !isNxt
+		text: "Clean up"
+		height: goButton.height
+		enabled: !retoonScreen.busy
+		anchors {
+			top: goButton.top
+			left: goButton.right
+			leftMargin: 24
+		}
+		topClickMargin: 2
+		onClicked: app.request("cleanup")
+	}
+
+	Text {
+		visible: !isNxt
+		anchors {
+			top: goButton.bottom
+			topMargin: 16
+			left: intro.left
+			right: intro.right
+		}
+		font {
+			family: qfont.regular.name
+			pixelSize: 16
+		}
+		color: "#565656"
+		wrapMode: Text.WordWrap
+		text: "Clean up removes old log files and update leftovers of the original software, to make room for ReToon. " +
+		      "The original software keeps working."
 	}
 }

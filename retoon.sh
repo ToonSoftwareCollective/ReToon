@@ -7,6 +7,8 @@
 #
 #   retoon.sh check      say what is there and what is missing
 #   retoon.sh install    put everything in place and restart into ReToon
+#   retoon.sh cleanup    Toon 1: remove old log files and update leftovers
+#                        of this system to make room, then check
 #
 # Without an argument it does what /tmp/retoon.request asks for.
 # Progress goes to /tmp/retoon.status (JSON, read by the app) and to
@@ -122,6 +124,30 @@ fi
 asked=$(cat /tmp/retoon.board 2>/dev/null)
 [ -z "$asked" ] || [ "$asked" = $BOARD ] || fail "The app and this script do not agree on which Toon this is."
 [ $BOARD = toon1 ] && ARCHIVE=$APP/retoon-toon1.tar.gz
+
+# Toon 1 only: make room on the nearly full flash. Old log files of the
+# original software and what its own updater left behind; nothing it needs
+# to run. A log that is still open is emptied first, so its room comes free
+# now and not only at the next restart. Then on as a check, with the result
+# in front of its text.
+DONE=""
+if [ "$ACTION" = cleanup ]; then
+	[ $BOARD = toon1 ] || fail "Cleaning up is only offered on a Toon 1."
+	status working 0 "Removing old log files and update leftovers"
+	before=$(df -k /mnt/data | tail -n 1 | awk '{print $4}')
+	for f in /mnt/data/qmf/log/* /mnt/data/update/*.log /mnt/data/update/*.strace \
+		 /mnt/data/update/upgrade-qb2.sh /mnt/data/update/*.ipk /mnt/data/update/*.tar*; do
+		[ -f "$f" ] || continue
+		: > "$f"
+		rm -f "$f"
+		log "removed $f"
+	done
+	rm -rf "$OS/download"
+	sync
+	after=$(df -k /mnt/data | tail -n 1 | awk '{print $4}')
+	DONE="Old log files and update leftovers removed ($(awk -v k=$((after - before)) 'BEGIN { printf "%.1f", (k < 0 ? 0 : k) / 1024 }') MB more free). "
+	ACTION=check
+fi
 # Which files the image has, with their checksums: from an archive placed
 # next to this script (its own files.sha256), or else from the newest
 # release of ReToon-images (files-toon2.sha256 / files-toon1.sha256 next to
@@ -265,14 +291,14 @@ fi
 if [ "$ACTION" = check ]; then
 	cleanup
 	if [ -z "$missing" ] && [ $kernel_in_place = 1 ]; then
-		status ready 0 "ReToon is on this Toon. Press the button to start it."
+		status ready 0 "${DONE}ReToon is on this Toon. Press the button to start it."
 	elif [ -s "$ARCHIVE" ] || [ -s "$APP/images.url" ] || [ -s "$APP/source.url" ]; then
 		n=$(echo $missing | wc -w)
 		[ $n = 0 ] && n=1	# only the kernel partition
 		[ $n = 1 ] && what="1 file" || what="$n files"
-		status needed 0 "ReToon is not on this Toon yet ($what to put in place). Press the button to install and start it."
+		status needed 0 "${DONE}ReToon is not on this Toon yet ($what to put in place). Press the button to install and start it."
 	else
-		status error 0 "ReToon is not on this Toon yet and the app has no download address (images.url)."
+		status error 0 "${DONE}ReToon is not on this Toon yet and the app has no download address (images.url)."
 	fi
 	exit 0
 fi

@@ -38,9 +38,9 @@ App {
 		f.send(text);
 	}
 
-	// what: "check" or "install"
+	// what: "check", "install" or "cleanup" (Toon 1)
 	function request(what) {
-		if (what === "install") {
+		if (what !== "check") {
 			setupState = "working";
 			setupText = "Starting...";
 			installAsked = Date.now();
