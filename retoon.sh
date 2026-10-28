@@ -178,15 +178,27 @@ hexof() { hexdump -v -e '1/1 "%02x"'; }
 # nanddump changed its mind about "-o": the old one (the original software)
 # includes the spare bytes of every page unless -o is given, the new one
 # (ReToon) leaves them out unless -o is given. Find out once from the size
-# of one block.
+# of one block. Skipping bad blocks is "--bb=skipbad", on older versions
+# "-b"; a version that knows neither shows its help and still ends without
+# an error, without writing anything. So each is tried on one block too.
 nd_opts() {
-	[ -n "$ND_OPTS" ] && return
+	[ -n "$ND_DONE" ] && return
+	ND_DONE=1
 	nanddump -l 0x20000 -f /tmp/retoon-nd /dev/$1 > /dev/null 2>&1
-	case "$(wc -c < /tmp/retoon-nd 2>/dev/null)" in
-	131072) ND_OPTS="--bb=skipbad" ;;
-	*) ND_OPTS="-o --bb=skipbad" ;;
+	case "$(wc -c 2>/dev/null < /tmp/retoon-nd)" in
+	131072) ND_OPTS="" ;;
+	*) ND_OPTS="-o" ;;
 	esac
+	for bb in --bb=skipbad -b; do
+		rm -f /tmp/retoon-nd
+		nanddump $ND_OPTS $bb -l 0x20000 -f /tmp/retoon-nd /dev/$1 > /dev/null 2>&1
+		if [ "$(wc -c 2>/dev/null < /tmp/retoon-nd)" = 131072 ]; then
+			ND_OPTS="$ND_OPTS $bb"
+			break
+		fi
+	done
 	rm -f /tmp/retoon-nd
+	log "nanddump options:$ND_OPTS"
 }
 flash_read() {	# mtd, bytes, file
 	REASON=""
@@ -196,13 +208,11 @@ flash_read() {	# mtd, bytes, file
 	blocks=$(( ($2 + 131071) / 131072 + 1 ))
 	have=$(( 0x$(sed -n "s/^$1: \([0-9a-f]*\) .*/\1/p" /proc/mtd) / 131072 ))
 	[ $blocks -le $have ] || blocks=$have
-	if nanddump $ND_OPTS -l $(( blocks * 131072 )) -f /tmp/retoon-read /dev/$1 2> /tmp/retoon-read.err; then
-		:
-	else
-		# an older nanddump without --bb: hope for no bad block
-		nanddump ${ND_OPTS%--bb=skipbad} -l $(( blocks * 131072 )) -f /tmp/retoon-read /dev/$1 2> /tmp/retoon-read.err ||
-		dd if=/dev/$1 of=/tmp/retoon-read bs=131072 count=$blocks 2> /tmp/retoon-read.err
-	fi
+	rm -f /tmp/retoon-read
+	nanddump $ND_OPTS -l $(( blocks * 131072 )) -f /tmp/retoon-read /dev/$1 2> /tmp/retoon-read.err
+	# nothing read at all: a plain read, hoping for no bad block
+	[ -s /tmp/retoon-read ] ||
+		dd if=/dev/$1 of=/tmp/retoon-read bs=131072 count=$blocks 2>> /tmp/retoon-read.err
 	dd if=/tmp/retoon-read of=$3 bs=$2 count=1 2>> /tmp/retoon-read.err
 	rm -f /tmp/retoon-read
 	if [ "$(wc -c < $3 2>/dev/null)" = $2 ]; then rm -f /tmp/retoon-read.err; return 0; fi

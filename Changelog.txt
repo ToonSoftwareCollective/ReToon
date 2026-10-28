@@ -1,3 +1,8 @@
+1.0.17
+- Toon 1: the install stopped at step 2 on Toons whose original software
+  has an older nanddump. That version does not know the option to skip bad
+  blocks; it showed its help text without reporting an error, so nothing
+  was read. The app now checks which options work before reading.
 1.0.16
 - Toon 1: a "Clean up" button next to the install button. It removes the
   original software's old log files and what its own updater left behind,
