@@ -481,8 +481,25 @@ for f in brcmfmac43430-sdio.bin brcmfmac43430-sdio.clm_blob brcmfmac43430-sdio.t
 done
 hcd=$(ls /etc/firmware/BCM43430A1*.hcd /lib/firmware/brcm/BCM43430A1*.hcd 2>/dev/null | head -n 1)
 [ -n "$hcd" ] && cp "$hcd" $FW/BCM43430A1.hcd
+# The WiFi settings of the oldest original software (Broadcom's own driver)
+# have boardflags3 bit 27 set: "force external 32 kHz sleep clock". With
+# ReToon's driver the chip then never starts its clock ("HT Avail timeout")
+# and there is no WiFi. The newer original software sets bit 26 instead,
+# "force internal 32 kHz sleep clock"; do the same. ReToon's start-up checks
+# this too, for Toons set up with an older version of this script.
+t=$FW/brcmfmac43430-sdio.txt
+v=$(sed -n 's/^boardflags3=//p' $t 2>/dev/null | tr -d '\r' | head -n 1)
+case "$v" in
+0x*|0X*)
+	if [ $((v & 0x08000000)) -ne 0 ]; then
+		n=$(printf '0x%08X' $(( (v & ~0x08000000) | 0x04000000 )))
+		sed "s/^boardflags3=.*/boardflags3=$n/" $t > $t.new && mv $t.new $t ||
+			fail "Cannot write to the data partition."
+		log "WiFi settings: boardflags3 $v -> $n (internal 32 kHz sleep clock)"
+	fi ;;
+esac
 [ -s $FW/brcmfmac43430-sdio.bin ] && [ -s $FW/brcmfmac43430-sdio.txt ] ||
-	log "no WiFi firmware found on this system; ReToon will use what its own image has"
+	log "no WiFi firmware found on this system; ReToon will start without WiFi"
 fi
 
 # asking for ReToon here also means: keep starting it

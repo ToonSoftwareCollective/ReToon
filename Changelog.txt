@@ -1,3 +1,8 @@
+1.0.18
+- Toon 2: no WiFi after starting ReToon on Toons with the oldest original
+  software. Its WiFi settings tell the chip to use an external 32 kHz
+  clock, which ReToon's driver cannot start. The app now sets the internal
+  clock instead, as the newer original software does.
 1.0.17
 - Toon 1: the install stopped at step 2 on Toons whose original software
   has an older nanddump. That version does not know the option to skip bad
